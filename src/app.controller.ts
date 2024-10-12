@@ -6,31 +6,28 @@ import { KAFKA_UPLOADS_TOPIC } from './utils/constants/kafka-const';
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
-
+  //check the optimization and speed.Keep working on the code quality.
   @MessagePattern(KAFKA_UPLOADS_TOPIC.upload_files)
   async uploadFiles(@Payload() payload: any) {
-    const { files, folder } = payload;
+    console.log('uploadFiles called with payload:');
+    const { files, module } = payload;
 
-    const isArray = Array.isArray(files);
-    const filesUploadPromises = [];
+    // Ensure files is an array for consistency
+    const fileArray = Array.isArray(files) ? files : [files.images];
 
-    if (isArray) {
-      for (const imageFile of files) {
-        // Push the promise directly
-        const uploadPromise = this.appService.uploadFile(imageFile, folder);
-        filesUploadPromises.push(uploadPromise);
-      }
-    } else {
-      const uploadPromise = this.appService.uploadFile(files.images, folder);
-      filesUploadPromises.push(uploadPromise);
-    }
+    // Upload files and gather results
+    const uploadedFiles = await Promise.all(
+      fileArray.map((file) => this.appService.uploadFile(file, module)),
+    );
 
-    // Await all promises to resolve and gather the results
-    const uploadedFiles = await Promise.all(filesUploadPromises);
+    // Destructure the results into separate arrays
+    const filesUrls = uploadedFiles.map((file) => file.publicUrl);
+    const metadata = uploadedFiles.map((file) => file.metadata);
 
-    // Now return the URLs for saving in MongoDB in sb-properties
+    // Return the result with both URLs and metadata
     return {
-      filesUrls: uploadedFiles, // Ensure you return the resolved URLs
+      filesUrls,
+      metadata,
     };
   }
 }

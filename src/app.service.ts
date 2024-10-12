@@ -26,14 +26,14 @@ export class AppService {
     );
   }
 
-  async uploadFile(files: Express.Multer.File, folder: string) {
+  async uploadFile(files: Express.Multer.File, module: string) {
     try {
       if (!files || !Buffer.isBuffer(files.buffer)) {
         files.buffer = Buffer.from(files.buffer);
       }
       const bucket = this.storage.bucket(this.bucketName);
       const blob = bucket.file(
-        `${folder}/${files.fieldname}/${files.originalname}`,
+        `${module}/${files.fieldname}/${files.originalname}`,
       );
       const blobStream = blob.createWriteStream({
         resumable: false,
@@ -41,22 +41,38 @@ export class AppService {
         metadata: { contentType: files.mimetype },
       });
 
-      // Fetch metadata
-      const [metadata] = await blob.getMetadata();
+      let publicUrl = '';
+      let metadata = {};
 
-      return new Promise((resolve, reject) => {
+      // Create a new Promise that resolves when the blob stream finishes
+      await new Promise<void>(async (resolve, reject) => {
         blobStream.on('error', reject);
-        blobStream.on('finish', () => {
-          const publicUrl = `https://storage.googleapis.com/${this.bucketName}/${blob.name}`;
-          const respond = {
-            publicUrl: publicUrl,
-            metadata: metadata,
-          };
-          resolve(respond);
-        });
-
+        blobStream.on('finish', resolve);
         blobStream.end(files.buffer);
+        // Fetch metadata after upload
+        publicUrl = `https://storage.googleapis.com/${this.bucketName}/${blob.name}`;
+        const [fileMeta] = await blob.getMetadata();
+        const oDocument = {
+          documentType: files.fieldname,
+          module: module,
+          documentFileType: fileMeta.contentType,
+          documentUrl: publicUrl,
+          fileName: files.originalname,
+          size: fileMeta.size,
+          //Value to update when there is mongodb collection create/save
+          propertyId: null,
+          projectId: null,
+          floorPlanId: null,
+          rentalsId: null,
+          developerId: null,
+          userId: null,
+          uploadedBy: null,
+        };
+
+        metadata = oDocument;
       });
+
+      return { publicUrl, metadata };
     } catch (oError) {
       throw new RpcException(oError);
     }
